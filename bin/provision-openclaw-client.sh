@@ -235,7 +235,7 @@ write_project_files() {
   local host="$4"
   local token="$5"
 
-  mkdir -p "$dir/data/linuxbrew" "$BACKUP_ROOT"
+  mkdir -p "$dir/data/.openclaw" "$dir/data/linuxbrew" "$BACKUP_ROOT"
 
   cat > "$dir/.env" <<EOF
 COMPOSE_PROJECT_NAME=${project}
@@ -243,10 +243,25 @@ PORT=${port}
 TZ=${TZ_VALUE}
 TRAEFIK_HOST=${host}
 OPENCLAW_GATEWAY_TOKEN=${token}
+OPENCLAW_STATE_DIR=/data/.openclaw
+OPENCLAW_CONFIG_PATH=/data/.openclaw/openclaw.json
 
 # Fill per client before production use:
 # OPENAI_API_KEY=
 # TELEGRAM_BOT_TOKEN=
+EOF
+
+  cat > "$dir/data/.openclaw/openclaw.json" <<'EOF'
+{
+  "session": {
+    "dmScope": "per-channel-peer",
+    "resetByType": {
+      "direct": {
+        "mode": "idle"
+      }
+    }
+  }
+}
 EOF
 
   if [[ -n "$CLIENT_ENV_FILE" ]]; then
