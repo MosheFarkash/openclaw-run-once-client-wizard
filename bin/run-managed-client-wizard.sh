@@ -8,6 +8,7 @@ TOKEN_FILE="${TOKEN_FILE:-/root/openclaw-run-once-wizard-token}"
 FORM_PATH="${FORM_PATH:-/root/openclaw-run-once-wizard.py}"
 PROVISION_CMD="${PROVISION_CMD:-/usr/local/bin/openclaw-run-once-provision-client}"
 OAUTH_HELPER="${OAUTH_HELPER:-/root/openclaw-run-once-oauth-chat.sh}"
+ASSETS_DIR="${ASSETS_DIR:-/usr/local/share/openclaw-run-once-client-wizard/assets}"
 CLEANUP_REQUEST="${CLEANUP_REQUEST:-/usr/local/bin/openclaw-run-once-cleanup-request}"
 CLEANUP_WORKER="${CLEANUP_WORKER:-/usr/local/bin/openclaw-run-once-cleanup-worker}"
 SELF_DESTRUCT=0
@@ -120,10 +121,14 @@ PACKAGE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 [[ -f "$PACKAGE_DIR/bin/provision-openclaw-client.sh" ]] || die "missing provisioner script"
 [[ -f "$PACKAGE_DIR/bin/openclaw-codex-oauth-chat.sh" ]] || die "missing OAuth helper"
 [[ -f "$PACKAGE_DIR/server/openclaw-run-once-wizard.py" ]] || die "missing run-once wizard server"
+[[ -d "$PACKAGE_DIR/assets/client-agent-workspace" ]] || die "missing client agent bootstrap assets"
 
 install -m 755 "$PACKAGE_DIR/bin/provision-openclaw-client.sh" "$PROVISION_CMD"
 install -m 755 "$PACKAGE_DIR/bin/openclaw-codex-oauth-chat.sh" "$OAUTH_HELPER"
 install -m 755 "$PACKAGE_DIR/server/openclaw-run-once-wizard.py" "$FORM_PATH"
+rm -rf "$ASSETS_DIR"
+mkdir -p "$(dirname "$ASSETS_DIR")"
+cp -a "$PACKAGE_DIR/assets" "$ASSETS_DIR"
 
 if [[ "$SELF_DESTRUCT" == "1" ]]; then
   cat > "$CLEANUP_WORKER" <<EOF

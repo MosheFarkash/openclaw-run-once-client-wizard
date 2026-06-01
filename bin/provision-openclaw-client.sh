@@ -230,8 +230,26 @@ new_token() {
 
 write_agent_bootstrap_files() {
   local workspace_dir="$1"
+  local package_dir
+  local assets_dir=""
+  local candidate
 
-  mkdir -p "$workspace_dir/skills/client-profile" "$workspace_dir/skills/client-operating-rules" "$workspace_dir/memory" "$workspace_dir/scripts"
+  package_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+
+  for candidate in \
+    "${CLIENT_AGENT_ASSETS_DIR:-}" \
+    "$package_dir/assets/client-agent-workspace" \
+    "/usr/local/share/openclaw-run-once-client-wizard/assets/client-agent-workspace"; do
+    if [[ -n "$candidate" && -d "$candidate" ]]; then
+      assets_dir="$candidate"
+      break
+    fi
+  done
+
+  [[ -n "$assets_dir" ]] || die "missing client agent bootstrap assets"
+
+  mkdir -p "$workspace_dir/memory" "$workspace_dir/scripts"
+  cp -a "$assets_dir"/. "$workspace_dir"/
 
   cat > "$workspace_dir/AGENTS.md" <<'EOF'
 # AGENTS.md - Client Agent Workspace
@@ -240,7 +258,7 @@ write_agent_bootstrap_files() {
 
 If `BOOTSTRAP.md` exists, follow it first. It is the only place that performs the first-run client onboarding and skill-reading flow.
 
-Do not reread the client onboarding skills on every session by default. Use them when the current task needs client business context or operating rules.
+Do not reread the bootstrap skills on every session by default. Use them when the current task needs Meta ads strategy, creative production, Drive access, or image model setup.
 
 ## Memory
 
@@ -262,12 +280,15 @@ This workspace has been pre-seeded for a client OpenClaw agent.
 
 This file is the one-time first-run prompt. Do this only while `BOOTSTRAP.md` exists:
 
-1. Open and read `skills/client-profile/SKILL.md`.
-2. Open and read `skills/client-operating-rules/SKILL.md`.
+1. Open and read `skills/meta-andromeda-ads-strategy/SKILL.md`.
+2. Open and read `skills/ad-creative-agent/SKILL.md`.
 3. Learn both files and load them as active skills for this client.
-4. Treat those two files as the client knowledge base and operating policy.
-5. If important client context is missing, ask only the minimum useful questions.
-6. Save important answers into the relevant workspace files.
+4. Review the bundled `ad-creative-agent` references as needed, especially `docs/ad-creative-agent-reference-guide.md`.
+5. Keep the helper skills available for relevant tasks:
+   - `skills/google-drive-service-account/SKILL.md`
+   - `skills/image-model-api-keys/SKILL.md`
+6. If important client context is missing, ask only the minimum useful questions.
+7. Save important answers into the relevant workspace files.
 
 If the user asks: "תקרא את ה-meta token שלך ותגיד לי לאיזה חשבונות יש לך גישה", run:
 
@@ -277,7 +298,7 @@ bash scripts/meta-token-accounts.sh
 
 Never print the `META_API_TOKEN` value. Report only accessible account IDs, names, status, currency, and timezone.
 
-After the first onboarding conversation is complete and the client profile/rules are usable, delete this `BOOTSTRAP.md` file. Future sessions should not repeat this onboarding read unless the user asks or the task needs those files.
+After the first onboarding conversation is complete and the skills are understood, delete this `BOOTSTRAP.md` file. Future sessions should not repeat this onboarding read unless the user asks or the task needs those files.
 EOF
 
   cat > "$workspace_dir/SOUL.md" <<'EOF'
@@ -400,55 +421,6 @@ for account in accounts:
 PY
 EOF
   chmod +x "$workspace_dir/scripts/meta-token-accounts.sh"
-
-  cat > "$workspace_dir/skills/client-profile/SKILL.md" <<'EOF'
-# Client Profile
-
-Use this skill whenever the work depends on understanding the client's business, market, offer, audience, product, funnel, or positioning.
-
-## Read First
-
-Before doing client-facing strategy, copy, campaign, support, or operational work, review this file and apply it as source-of-truth context.
-
-## Fill During Onboarding
-
-- Business name:
-- Website:
-- Core offer:
-- Target audience:
-- Main pain points:
-- Promise / outcome:
-- Proof assets:
-- Current funnel:
-- Current channels:
-- Main constraints:
-- Things not to say or do:
-EOF
-
-  cat > "$workspace_dir/skills/client-operating-rules/SKILL.md" <<'EOF'
-# Client Operating Rules
-
-Use this skill for the client's workflow, tone, approvals, and execution boundaries.
-
-## Default Behavior
-
-- Be concise and action-oriented.
-- Use the client's existing assets and facts before inventing new ones.
-- Ask only when missing information blocks execution.
-- Keep secrets private and refer to secret locations rather than values.
-- Before external actions such as emails, public posts, paid ads, or destructive infrastructure changes, get explicit approval.
-
-## Fill During Onboarding
-
-- Preferred language:
-- Tone of voice:
-- Approval rules:
-- Reporting format:
-- Main recurring workflows:
-- Important tools/accounts:
-- External actions requiring approval:
-- Known technical gotchas:
-EOF
 }
 
 write_project_files() {

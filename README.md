@@ -73,10 +73,11 @@ Provisioned clients also get a persistent agent workspace under `/data/.openclaw
 
 - `AGENTS.md` and `BOOTSTRAP.md`,
 - `scripts/meta-token-accounts.sh`,
-- `skills/client-profile/SKILL.md`,
-- `skills/client-operating-rules/SKILL.md`.
+- `skills/meta-andromeda-ads-strategy/SKILL.md`,
+- `skills/ad-creative-agent/SKILL.md` plus references,
+- helper skills from the creative workshop bundle, including Google Drive and image model setup.
 
-Only `BOOTSTRAP.md` tells the agent to read and learn the two client skill files. After first onboarding, the agent deletes `BOOTSTRAP.md`; `AGENTS.md` keeps only general workspace safety/memory guidance and does not force the skill-read on every session.
+Only `BOOTSTRAP.md` tells the agent to read, learn, and load the bootstrap skills. After first onboarding, the agent deletes `BOOTSTRAP.md`; `AGENTS.md` keeps only general workspace safety/memory guidance and does not force the skill-read on every session.
 
 The Meta account helper reads `META_API_TOKEN` from the container environment and reports accessible ad accounts without printing the token:
 
