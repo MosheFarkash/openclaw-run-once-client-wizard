@@ -37,7 +37,9 @@ SLUG_RE = re.compile(r"^[a-z0-9][a-z0-9-]{0,50}[a-z0-9]$")
 CALLBACK_RE = re.compile(r"^http://localhost:[0-9]+/auth/callback\?")
 OAUTH_URL_RE = re.compile(r"https://auth\.openai\.com/oauth/authorize[^\s<>'\"]+")
 DEVICE_URL_RE = re.compile(r"https?://[^\s<>'\"]+")
-DEVICE_CODE_RE = re.compile(r"(?:code|קוד)[^A-Za-z0-9]{0,20}([A-Z0-9][A-Z0-9-]{3,20})", re.IGNORECASE)
+ANSI_RE = re.compile(r"\x1B\[[0-9;?]*[ -/]*[@-~]")
+DEVICE_LABEL_URL_RE = re.compile(r"\bURL:\s*(https?://[^\s<>'\"]+)", re.IGNORECASE)
+DEVICE_LABEL_CODE_RE = re.compile(r"\bCode:\s*([A-Z0-9]{4,}(?:-[A-Z0-9]{3,})+|[A-Z0-9]{6,})\b", re.IGNORECASE)
 PAIRING_CODE_RE = re.compile(r"^[A-Za-z0-9_-]{4,40}$")
 SENSITIVE_KEYS = ("OPENAI_API_KEY", "TELEGRAM_BOT_TOKEN", "ANTHROPIC_API_KEY", "OPENROUTER_API_KEY", "META_API_TOKEN")
 ENV_KEY_RE = re.compile(r"^[A-Z][A-Z0-9_]{1,80}$")
@@ -385,20 +387,27 @@ def parse_extra_env(text_value: str) -> dict[str, str]:
 
 
 def extract_device_auth(output: str) -> tuple[str, str]:
-    urls = DEVICE_URL_RE.findall(output)
+    clean_output = ANSI_RE.sub("", output).replace("\r", "\n")
+    urls = DEVICE_LABEL_URL_RE.findall(clean_output) or DEVICE_URL_RE.findall(clean_output)
     auth_url = ""
     for url in urls:
         lowered = url.lower()
-        if "openai" in lowered or "device" in lowered or "auth" in lowered:
-            auth_url = url
+        if "auth.openai.com" in lowered and "device" in lowered:
+            auth_url = url.rstrip(" .,:;)")
             break
+    if not auth_url:
+        for url in urls:
+            lowered = url.lower()
+            if "openai" in lowered or "device" in lowered or "auth" in lowered:
+                auth_url = url.rstrip(" .,:;)")
+                break
     if not auth_url and urls:
-        auth_url = urls[0]
+        auth_url = urls[0].rstrip(" .,:;)")
 
     code = ""
-    code_match = DEVICE_CODE_RE.search(output)
+    code_match = DEVICE_LABEL_CODE_RE.search(clean_output)
     if code_match:
-        code = code_match.group(1).strip(" .,:;")
+        code = code_match.group(1).strip(" .,:;").upper()
 
     return auth_url, code
 
@@ -826,15 +835,26 @@ class ProvisionHandler(BaseHTTPRequestHandler):
         pid_path.chmod(0o600)
 
         output = ""
-        for _ in range(12):
+        auth_url = ""
+        device_code = ""
+        for _ in range(90):
             if log_path.exists():
                 output = log_path.read_text(encoding="utf-8", errors="replace")
-                if output.strip():
+                auth_url, device_code = extract_device_auth(output)
+                if auth_url and device_code:
+                    return auth_url, device_code, output
+                if status_path.exists():
                     break
             time.sleep(0.5)
-        output = output or "Device-code auth process started. Refresh/check in a few seconds."
-        auth_url, device_code = extract_device_auth(output)
-        return auth_url, device_code, output
+
+        if log_path.exists():
+            output = log_path.read_text(encoding="utf-8", errors="replace")
+            auth_url, device_code = extract_device_auth(output)
+        if auth_url and device_code:
+            return auth_url, device_code, output
+        if auth_url:
+            raise RuntimeError("Device-code auth URL was produced, but the verification code was not found yet.\n\n" + output[-4000:])
+        raise RuntimeError("Device-code auth URL was not produced.\n\n" + output[-4000:])
 
     def check_device_code(self, slug: str) -> tuple[int | None, str, str, str]:
         state_dir = self.state_dir(slug)
