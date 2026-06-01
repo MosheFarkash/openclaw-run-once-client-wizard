@@ -48,6 +48,7 @@ The cleanup never deletes the provisioned client stack:
 - `/docker/openclaw-<slug>`
 - the client `.env`,
 - the client OpenClaw config at `/docker/openclaw-<slug>/data/.openclaw/openclaw.json`,
+- the client agent workspace at `/docker/openclaw-<slug>/data/.openclaw/workspace`,
 - the OpenClaw data volume,
 - `docker-compose.yml`,
 - `backup.sh`,
@@ -67,5 +68,13 @@ The cleanup never deletes the provisioned client stack:
 Remote servers cannot reliably open a browser window on your local machine. This product prints a ready link and SSH tunnel command instead.
 
 Provisioned clients are created with `session.resetByType.direct.mode = "idle"` so direct-message sessions are not reset by the default nightly cleanup.
+
+Provisioned clients also get a persistent agent workspace under `/data/.openclaw/workspace` with:
+
+- `AGENTS.md` and `BOOTSTRAP.md`,
+- `skills/client-profile/SKILL.md`,
+- `skills/client-operating-rules/SKILL.md`.
+
+The bootstrap tells the agent to read the two client skill files before normal replies and to update them during onboarding.
 
 For public self-serve/payment-gated onboarding, use a separate Cardcom/session gate before exposing any wizard URL.

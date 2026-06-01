@@ -228,6 +228,137 @@ new_token() {
   fi
 }
 
+write_agent_bootstrap_files() {
+  local workspace_dir="$1"
+
+  mkdir -p "$workspace_dir/skills/client-profile" "$workspace_dir/skills/client-operating-rules" "$workspace_dir/memory"
+
+  cat > "$workspace_dir/AGENTS.md" <<'EOF'
+# AGENTS.md - Client Agent Workspace
+
+## Every Session
+
+Before answering the user, read these workspace files:
+
+1. `skills/client-profile/SKILL.md`
+2. `skills/client-operating-rules/SKILL.md`
+3. `USER.md`
+4. `memory/YYYY-MM-DD.md` for today and yesterday, if they exist
+
+If `BOOTSTRAP.md` exists, follow it first.
+
+## Memory
+
+- Daily notes live in `memory/YYYY-MM-DD.md`.
+- Capture important client decisions, preferences, credentials locations, and operating lessons.
+- Do not write secrets into memory files or chat.
+
+## Safety
+
+- Do not expose private client data.
+- Ask before sending public messages, emails, campaigns, or destructive commands.
+- Prefer recoverable moves/backups over permanent deletion.
+EOF
+
+  cat > "$workspace_dir/BOOTSTRAP.md" <<'EOF'
+# BOOTSTRAP.md - First Client Onboarding Run
+
+This workspace has been pre-seeded for a client OpenClaw agent.
+
+Before the first normal reply:
+
+1. Read `skills/client-profile/SKILL.md`.
+2. Read `skills/client-operating-rules/SKILL.md`.
+3. Treat those two files as the client knowledge base and operating policy.
+4. If important client context is missing, ask only the minimum useful questions.
+
+After the first onboarding conversation is complete, update the relevant files with what you learned. If the client profile and operating rules are usable, delete this `BOOTSTRAP.md` file so future sessions follow `AGENTS.md` directly.
+EOF
+
+  cat > "$workspace_dir/SOUL.md" <<'EOF'
+# SOUL.md - Client Agent
+
+You are a practical client assistant inside OpenClaw.
+
+Be direct, useful, and context-aware. Learn the client's business from the local workspace files, then help them execute work without unnecessary ceremony.
+EOF
+
+  cat > "$workspace_dir/USER.md" <<'EOF'
+# USER.md - Client
+
+Client details are not filled yet.
+
+Update this file during onboarding with:
+
+- Client name
+- What to call them
+- Timezone
+- Communication preferences
+- Important boundaries
+EOF
+
+  cat > "$workspace_dir/TOOLS.md" <<'EOF'
+# TOOLS.md - Client Tools
+
+Record local operational notes here:
+
+- API/key locations, without exposing secret values
+- Account names
+- Project paths
+- Common commands
+- Gotchas learned during setup
+EOF
+
+  cat > "$workspace_dir/skills/client-profile/SKILL.md" <<'EOF'
+# Client Profile
+
+Use this skill whenever the work depends on understanding the client's business, market, offer, audience, product, funnel, or positioning.
+
+## Read First
+
+Before doing client-facing strategy, copy, campaign, support, or operational work, review this file and apply it as source-of-truth context.
+
+## Fill During Onboarding
+
+- Business name:
+- Website:
+- Core offer:
+- Target audience:
+- Main pain points:
+- Promise / outcome:
+- Proof assets:
+- Current funnel:
+- Current channels:
+- Main constraints:
+- Things not to say or do:
+EOF
+
+  cat > "$workspace_dir/skills/client-operating-rules/SKILL.md" <<'EOF'
+# Client Operating Rules
+
+Use this skill for the client's workflow, tone, approvals, and execution boundaries.
+
+## Default Behavior
+
+- Be concise and action-oriented.
+- Use the client's existing assets and facts before inventing new ones.
+- Ask only when missing information blocks execution.
+- Keep secrets private and refer to secret locations rather than values.
+- Before external actions such as emails, public posts, paid ads, or destructive infrastructure changes, get explicit approval.
+
+## Fill During Onboarding
+
+- Preferred language:
+- Tone of voice:
+- Approval rules:
+- Reporting format:
+- Main recurring workflows:
+- Important tools/accounts:
+- External actions requiring approval:
+- Known technical gotchas:
+EOF
+}
+
 write_project_files() {
   local dir="$1"
   local project="$2"
@@ -236,6 +367,7 @@ write_project_files() {
   local token="$5"
 
   mkdir -p "$dir/data/.openclaw" "$dir/data/linuxbrew" "$BACKUP_ROOT"
+  write_agent_bootstrap_files "$dir/data/.openclaw/workspace"
 
   cat > "$dir/.env" <<EOF
 COMPOSE_PROJECT_NAME=${project}
@@ -245,6 +377,7 @@ TRAEFIK_HOST=${host}
 OPENCLAW_GATEWAY_TOKEN=${token}
 OPENCLAW_STATE_DIR=/data/.openclaw
 OPENCLAW_CONFIG_PATH=/data/.openclaw/openclaw.json
+OPENCLAW_WORKSPACE_DIR=/data/.openclaw/workspace
 
 # Fill per client before production use:
 # OPENAI_API_KEY=
