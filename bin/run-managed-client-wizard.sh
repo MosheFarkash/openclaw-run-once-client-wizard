@@ -147,7 +147,8 @@ path.write_text(secrets.token_urlsafe(32) + "\n", encoding="utf-8")
 path.chmod(0o600)
 PY
 systemctl daemon-reload
-systemctl enable --now "$SERVICE_NAME" >/dev/null
+systemctl enable "$SERVICE_NAME" >/dev/null
+systemctl restart "$SERVICE_NAME"
 systemctl is-active --quiet "$SERVICE_NAME"
 
 token="$(cat "$TOKEN_FILE")"
