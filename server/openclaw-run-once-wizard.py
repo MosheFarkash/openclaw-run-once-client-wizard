@@ -36,6 +36,8 @@ TOKEN_RE = re.compile(r"^[A-Za-z0-9_.:-]{12,}$")
 SLUG_RE = re.compile(r"^[a-z0-9][a-z0-9-]{0,50}[a-z0-9]$")
 CALLBACK_RE = re.compile(r"^http://localhost:[0-9]+/auth/callback\?")
 OAUTH_URL_RE = re.compile(r"https://auth\.openai\.com/oauth/authorize[^\s<>'\"]+")
+DEVICE_URL_RE = re.compile(r"https?://[^\s<>'\"]+")
+DEVICE_CODE_RE = re.compile(r"(?:code|קוד)[^A-Za-z0-9]{0,20}([A-Z0-9][A-Z0-9-]{3,20})", re.IGNORECASE)
 PAIRING_CODE_RE = re.compile(r"^[A-Za-z0-9_-]{4,40}$")
 SENSITIVE_KEYS = ("OPENAI_API_KEY", "TELEGRAM_BOT_TOKEN", "ANTHROPIC_API_KEY", "OPENROUTER_API_KEY", "META_API_TOKEN")
 ENV_KEY_RE = re.compile(r"^[A-Z][A-Z0-9_]{1,80}$")
@@ -86,6 +88,7 @@ def html_page(
     slug: str = "",
     oauth_slug: str = "",
     oauth_url: str = "",
+    device_code: str = "",
     public_url: str = "",
 ) -> bytes:
     safe_message = html.escape(message)
@@ -94,16 +97,12 @@ def html_page(
     safe_slug = html.escape(slug or oauth_slug)
     safe_oauth_slug = html.escape(oauth_slug or slug)
     safe_oauth_url = html.escape(oauth_url)
+    safe_device_code = html.escape(device_code)
     safe_public_url = html.escape(public_url)
     checked_start = "checked"
     checked_smoke = "checked"
     message_html = f'<div class="msg">{safe_message}</div>' if safe_message else ""
-    debug_open = " open" if step == "device" else ""
-    debug_html = (
-        f'<details class="debug"{debug_open}><summary>פלט טכני</summary><pre>{safe_output}</pre></details>'
-        if safe_output
-        else ""
-    )
+    debug_html = ""
 
     create_block = f"""
       <form method="post" action="/create" data-loading="מקים לקוח OpenClaw. זה יכול לקחת דקה או שתיים.">
@@ -179,7 +178,9 @@ def html_page(
       <div class="step-card">
         <div class="step-kicker">שלב 2 מתוך 4</div>
         <h2>חיבור OpenAI עם Device Code</h2>
-        <p class="hint">פתח את כתובת האימות שמופיעה בפלט הטכני, הזן את הקוד, ואז לחץ כאן לבדיקה. אין צורך להדביק Callback URL.</p>
+        <p class="hint">לחץ על הכפתור, הזן את קוד האימות, ואז חזור לכאן ולחץ בדיקה. אין צורך להדביק Callback URL.</p>
+        {f'<a class="button-link primary" href="{safe_oauth_url}" target="_blank" rel="noopener noreferrer">פתח אימות OpenAI</a>' if safe_oauth_url else ''}
+        {f'<div class="device-code" dir="ltr">{safe_device_code}</div>' if safe_device_code else ''}
         <form method="post" action="/device-check" data-loading="בודק אם חיבור OpenAI הושלם.">
           <input type="hidden" name="token" value="{safe_token}">
           <input type="hidden" name="slug" value="{safe_oauth_slug}">
@@ -280,6 +281,7 @@ def html_page(
     .step-card.complete {{ background: #ecfdf5; border-color: #86efac; }}
     .step-kicker {{ color: #2563eb; font-size: 13px; font-weight: 750; margin-bottom: 6px; }}
     .callback-panel {{ border-color: #93c5fd; background: #eff6ff; }}
+    .device-code {{ display: inline-flex; align-items: center; justify-content: center; min-height: 46px; margin: 12px 0 0; padding: 0 18px; border: 1px solid #93c5fd; border-radius: 6px; background: #eff6ff; color: #1e3a8a; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 20px; font-weight: 800; letter-spacing: 0; }}
     .advanced, .debug {{ margin-top: 16px; }}
     .advanced summary, .debug summary {{ cursor: pointer; color: #334155; font-weight: 650; }}
     pre {{ margin: 16px 0 0; padding: 14px; border-radius: 6px; background: #0f172a; color: #e2e8f0; overflow: auto; direction: ltr; text-align: left; font-size: 13px; }}
@@ -380,6 +382,25 @@ def parse_extra_env(text_value: str) -> dict[str, str]:
             raise ValueError(f"ENV value cannot contain newlines: {key}")
         env[key] = value
     return env
+
+
+def extract_device_auth(output: str) -> tuple[str, str]:
+    urls = DEVICE_URL_RE.findall(output)
+    auth_url = ""
+    for url in urls:
+        lowered = url.lower()
+        if "openai" in lowered or "device" in lowered or "auth" in lowered:
+            auth_url = url
+            break
+    if not auth_url and urls:
+        auth_url = urls[0]
+
+    code = ""
+    code_match = DEVICE_CODE_RE.search(output)
+    if code_match:
+        code = code_match.group(1).strip(" .,:;")
+
+    return auth_url, code
 
 
 class ProvisionHandler(BaseHTTPRequestHandler):
@@ -779,7 +800,7 @@ class ProvisionHandler(BaseHTTPRequestHandler):
             output = log_path.read_text(encoding="utf-8", errors="replace")
         raise RuntimeError("OAuth URL was not produced.\n\n" + output[-4000:])
 
-    def start_device_code(self, slug: str) -> str:
+    def start_device_code(self, slug: str) -> tuple[str, str, str]:
         self.install_oauth_helper(slug)
         container = self.find_container(slug)
         if not container:
@@ -811,9 +832,11 @@ class ProvisionHandler(BaseHTTPRequestHandler):
                 if output.strip():
                     break
             time.sleep(0.5)
-        return output or "Device-code auth process started. Refresh/check in a few seconds."
+        output = output or "Device-code auth process started. Refresh/check in a few seconds."
+        auth_url, device_code = extract_device_auth(output)
+        return auth_url, device_code, output
 
-    def check_device_code(self, slug: str) -> tuple[int | None, str]:
+    def check_device_code(self, slug: str) -> tuple[int | None, str, str, str]:
         state_dir = self.state_dir(slug)
         log_path = state_dir / "openai-codex-device-code.log"
         status_path = state_dir / "openai-codex-device-code.status"
@@ -821,11 +844,13 @@ class ProvisionHandler(BaseHTTPRequestHandler):
         if log_path.exists():
             output = log_path.read_text(encoding="utf-8", errors="replace")
         if not status_path.exists():
-            return None, output or "Device-code auth is still running."
+            auth_url, device_code = extract_device_auth(output)
+            return None, output or "Device-code auth is still running.", auth_url, device_code
 
         raw_status = status_path.read_text(encoding="utf-8", errors="replace").strip()
         if not raw_status.isdigit():
-            return 1, output + f"\nUnexpected device-code status: {raw_status}"
+            auth_url, device_code = extract_device_auth(output)
+            return 1, output + f"\nUnexpected device-code status: {raw_status}", auth_url, device_code
 
         status_code = int(raw_status)
         if status_code == 0:
@@ -833,8 +858,10 @@ class ProvisionHandler(BaseHTTPRequestHandler):
             output += "\n\n" + order_output
             if order_code == 0:
                 output += "\nClient restart deferred until final wizard step."
-            return max(status_code, order_code), output
-        return status_code, output
+            auth_url, device_code = extract_device_auth(output)
+            return max(status_code, order_code), output, auth_url, device_code
+        auth_url, device_code = extract_device_auth(output)
+        return status_code, output, auth_url, device_code
 
     def finish_oauth(self, slug: str, callback_url: str, run_smoke: bool) -> tuple[int, str]:
         if not CALLBACK_RE.match(callback_url):
@@ -1175,15 +1202,16 @@ class ProvisionHandler(BaseHTTPRequestHandler):
             return
 
         try:
-            code, output = self.check_device_code(slug)
+            code, output, auth_url, device_code = self.check_device_code(slug)
             if code is None:
                 self.send_html(
                     html_page(
                         self.server.admin_token,
                         f"חיבור Device Code עבור `{slug}` עדיין ממתין לאישור.",
-                        output,
                         step="device",
                         oauth_slug=slug,
+                        oauth_url=auth_url,
+                        device_code=device_code,
                         public_url=self.client_public_url(slug),
                     )
                 )
@@ -1204,9 +1232,10 @@ class ProvisionHandler(BaseHTTPRequestHandler):
                 html_page(
                     self.server.admin_token,
                     f"חיבור Device Code עבור `{slug}` נכשל עם exit code {code}",
-                    output,
                     step="device",
                     oauth_slug=slug,
+                    oauth_url=auth_url,
+                    device_code=device_code,
                     public_url=self.client_public_url(slug),
                 ),
                 status=500,
@@ -1320,16 +1349,17 @@ class ProvisionHandler(BaseHTTPRequestHandler):
 
             if auth_method == "device_code" and not dry_run:
                 try:
-                    device_output = self.start_device_code(slug)
+                    device_url, device_code, device_output = self.start_device_code(slug)
                     combined += "\n\n=== Device-code auth start ===\n" + device_output
                     self.send_html(
                         html_page(
                             self.server.admin_token,
                             f"לקוח `{slug}` נוצר. השלם את חיבור OpenAI עם Device Code.",
-                            combined,
                             step="device",
                             slug=slug,
                             oauth_slug=slug,
+                            oauth_url=device_url,
+                            device_code=device_code,
                             public_url=self.client_public_url(slug),
                         )
                     )
