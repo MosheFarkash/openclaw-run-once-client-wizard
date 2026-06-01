@@ -118,7 +118,6 @@ def html_page(
           <label>חיבור מודל</label>
           <div class="mode-grid">
             <label><input name="auth_method" type="radio" value="oauth" checked> OpenAI OAuth</label>
-            <label><input name="auth_method" type="radio" value="device_code"> OpenAI Device Code</label>
             <label><input name="auth_method" type="radio" value="api_key"> OpenAI API Key</label>
           </div>
 
@@ -1227,59 +1226,16 @@ class ProvisionHandler(BaseHTTPRequestHandler):
             return
 
         slug = slugify(fields.get("slug", ""))
-        if not SLUG_RE.match(slug):
-            self.send_html(html_page(self.server.admin_token, "שם לקוח לא תקין.", step="create"))
-            return
-
-        try:
-            code, output, auth_url, device_code = self.check_device_code(slug)
-            if code is None:
-                self.send_html(
-                    html_page(
-                        self.server.admin_token,
-                        f"חיבור Device Code עבור `{slug}` עדיין ממתין לאישור.",
-                        step="device",
-                        oauth_slug=slug,
-                        oauth_url=auth_url,
-                        device_code=device_code,
-                        public_url=self.client_public_url(slug),
-                    )
-                )
-                return
-            if code == 0:
-                self.send_html(
-                    html_page(
-                        self.server.admin_token,
-                        f"חיבור OpenAI עבור `{slug}` הצליח. עכשיו אשר את ה־Telegram pairing.",
-                        output,
-                        step="telegram",
-                        slug=slug,
-                        public_url=self.client_public_url(slug),
-                    )
-                )
-                return
-            self.send_html(
-                html_page(
-                    self.server.admin_token,
-                    f"חיבור Device Code עבור `{slug}` נכשל: {output}",
-                    step="device",
-                    oauth_slug=slug,
-                    public_url=self.client_public_url(slug),
-                ),
-                status=500,
-            )
-        except Exception as exc:
-            self.send_html(
-                html_page(
-                    self.server.admin_token,
-                    "בדיקת Device Code נכשלה.",
-                    str(exc),
-                    step="device",
-                    oauth_slug=slug,
-                    public_url=self.client_public_url(slug),
-                ),
-                status=500,
-            )
+        self.send_html(
+            html_page(
+                self.server.admin_token,
+                "Device Code בוטל בוויזרד הזה. השתמש ב־OpenAI OAuth או OpenAI API Key.",
+                step="create",
+                slug=slug,
+                public_url=self.client_public_url(slug) if SLUG_RE.match(slug) else "",
+            ),
+            status=400,
+        )
 
     def handle_create(self) -> None:
         fields = self.form_fields()
@@ -1299,7 +1255,10 @@ class ProvisionHandler(BaseHTTPRequestHandler):
         if not SLUG_RE.match(slug):
             self.send_html(html_page(self.server.admin_token, "שם הלקוח לא תקין אחרי ניקוי. השתמש באנגלית/מספרים/מקפים.", step="create"))
             return
-        if auth_method not in {"oauth", "device_code", "api_key"}:
+        if auth_method == "device_code":
+            self.send_html(html_page(self.server.admin_token, "Device Code בוטל בוויזרד הזה. השתמש ב־OpenAI OAuth או OpenAI API Key.", step="create"))
+            return
+        if auth_method not in {"oauth", "api_key"}:
             self.send_html(html_page(self.server.admin_token, "שיטת חיבור מודל לא תקינה.", step="create"))
             return
         if not telegram_bot_token:
@@ -1311,7 +1270,7 @@ class ProvisionHandler(BaseHTTPRequestHandler):
         if not validate_no_newline(openai_api_key, telegram_bot_token):
             self.send_html(html_page(self.server.admin_token, "המפתחות לא יכולים לכלול ירידת שורה.", step="create"))
             return
-        if auth_method in {"oauth", "device_code"} and not start and not dry_run:
+        if auth_method == "oauth" and not start and not dry_run:
             self.send_html(html_page(self.server.admin_token, "חיבור OpenAI דורש להפעיל את הקונטיינר כדי להריץ auth בתוך הלקוח.", step="create"))
             return
 
@@ -1373,37 +1332,6 @@ class ProvisionHandler(BaseHTTPRequestHandler):
                 except Exception as exc:
                     combined += "\n\n=== OAuth start failed ===\n" + redact(str(exc), sensitive_values)
                     self.send_html(html_page(self.server.admin_token, f"לקוח `{slug}` נוצר, אבל התחלת OAuth נכשלה.", combined, step="create", slug=slug), status=500)
-                    return
-
-            if auth_method == "device_code" and not dry_run:
-                try:
-                    device_url, device_code, device_output = self.start_device_code(slug)
-                    combined += "\n\n=== Device-code auth start ===\n" + device_output
-                    self.send_html(
-                        html_page(
-                            self.server.admin_token,
-                            f"לקוח `{slug}` נוצר. השלם את חיבור OpenAI עם Device Code.",
-                            step="device",
-                            slug=slug,
-                            oauth_slug=slug,
-                            oauth_url=device_url,
-                            device_code=device_code,
-                            public_url=self.client_public_url(slug),
-                        )
-                    )
-                    return
-                except Exception as exc:
-                    combined += "\n\n=== Device-code auth start failed ===\n" + redact(str(exc), sensitive_values)
-                    self.send_html(
-                        html_page(
-                            self.server.admin_token,
-                            f"לקוח `{slug}` נוצר, אבל התחלת Device Code נכשלה: {redact(str(exc), sensitive_values)}",
-                            step="create",
-                            slug=slug,
-                            public_url=self.client_public_url(slug),
-                        ),
-                        status=500,
-                    )
                     return
 
             status = "הצליח" if proc.returncode == 0 else f"נכשל עם exit code {proc.returncode}"
