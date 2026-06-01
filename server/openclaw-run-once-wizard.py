@@ -98,8 +98,9 @@ def html_page(
     checked_start = "checked"
     checked_smoke = "checked"
     message_html = f'<div class="msg">{safe_message}</div>' if safe_message else ""
+    debug_open = " open" if step == "device" else ""
     debug_html = (
-        f'<details class="debug"><summary>פלט טכני</summary><pre>{safe_output}</pre></details>'
+        f'<details class="debug"{debug_open}><summary>פלט טכני</summary><pre>{safe_output}</pre></details>'
         if safe_output
         else ""
     )
@@ -116,6 +117,7 @@ def html_page(
           <label>חיבור מודל</label>
           <div class="mode-grid">
             <label><input name="auth_method" type="radio" value="oauth" checked> OpenAI OAuth</label>
+            <label><input name="auth_method" type="radio" value="device_code"> OpenAI Device Code</label>
             <label><input name="auth_method" type="radio" value="api_key"> OpenAI API Key</label>
           </div>
 
@@ -159,16 +161,33 @@ def html_page(
         <div class="step-kicker">שלב 3 מתוך 4</div>
         <h2>הדבקת Callback URL</h2>
         <p class="hint">אחרי ההתחברות הדפדפן יגיע לכתובת שמתחילה ב־<span dir="ltr">http://localhost:</span>. הדבק כאן את כל הכתובת משורת הכתובת.</p>
-        <form method="post" action="/oauth-finish" data-loading="מסיים OAuth ומאתחל את לקוח OpenClaw.">
+        <form method="post" action="/oauth-finish" data-loading="מסיים OAuth ושומר את החיבור. האתחול יבוצע רק בסוף.">
           <input type="hidden" name="token" value="{safe_token}">
           <input type="hidden" name="slug" value="{safe_oauth_slug}">
           <label for="callback_url">Callback URL</label>
           <input id="callback_url" name="callback_url" type="text" autocomplete="off" placeholder="http://localhost:.../auth/callback?code=..." required>
           <div class="row">
             <input id="oauth_smoke" name="smoke" type="checkbox" value="1" checked>
-            <label for="oauth_smoke">להריץ smoke אחרי החיבור</label>
+            <label for="oauth_smoke">להריץ smoke בסוף אחרי האתחול הסופי</label>
           </div>
           <button type="submit">סיים חיבור OAuth</button>
+        </form>
+      </div>
+"""
+
+    device_block = f"""
+      <div class="step-card">
+        <div class="step-kicker">שלב 2 מתוך 4</div>
+        <h2>חיבור OpenAI עם Device Code</h2>
+        <p class="hint">פתח את כתובת האימות שמופיעה בפלט הטכני, הזן את הקוד, ואז לחץ כאן לבדיקה. אין צורך להדביק Callback URL.</p>
+        <form method="post" action="/device-check" data-loading="בודק אם חיבור OpenAI הושלם.">
+          <input type="hidden" name="token" value="{safe_token}">
+          <input type="hidden" name="slug" value="{safe_oauth_slug}">
+          <div class="row">
+            <input id="device_smoke" name="smoke" type="checkbox" value="1" checked>
+            <label for="device_smoke">להריץ smoke בסוף אחרי האתחול הסופי</label>
+          </div>
+          <button type="submit">בדוק חיבור OpenAI</button>
         </form>
       </div>
 """
@@ -178,7 +197,7 @@ def html_page(
         <div class="step-kicker">שלב 4 מתוך 4</div>
         <h2>אישור Telegram Pairing</h2>
         <p class="hint">שלח <span dir="ltr">/start</span> לבוט של הלקוח, העתק את הקוד שהתקבל, והדבק אותו כאן. ה־slug כבר נלקח מהשלב הראשון: <span dir="ltr">{safe_slug}</span>.</p>
-        <form method="post" action="/telegram-approve" data-loading="מאשר pairing ומאתחל את הקונטיינר של הלקוח.">
+        <form method="post" action="/telegram-approve" data-loading="מאשר pairing. האתחול יבוצע רק בסוף.">
           <input type="hidden" name="token" value="{safe_token}">
           <input type="hidden" name="slug" value="{safe_slug}">
           <label for="pairing_code">Telegram pairing code</label>
@@ -201,14 +220,18 @@ def html_page(
       <div class="step-card">
         <div class="step-kicker">שלב אחרון</div>
         <h2>מפתחות ENV ללקוח</h2>
-        <p class="hint">אפשר להוסיף עכשיו Meta API Token ועוד מפתחות שהלקוח צריך. הם יישמרו בקובץ <span dir="ltr">.env</span> של הפרויקט ויטענו אחרי אתחול הקונטיינר.</p>
-        <form method="post" action="/env-save" data-loading="שומר מפתחות ומאתחל את הקונטיינר של הלקוח.">
+        <p class="hint">אפשר להוסיף עכשיו Meta API Token ועוד מפתחות שהלקוח צריך. הם יישמרו בקובץ <span dir="ltr">.env</span> של הפרויקט וייטענו באתחול הסופי.</p>
+        <form method="post" action="/env-save" data-loading="שומר מפתחות ומבצע אתחול סופי אחד לקונטיינר.">
           <input type="hidden" name="token" value="{safe_token}">
           <input type="hidden" name="slug" value="{safe_slug}">
           <label for="meta_api_token">Meta API Token</label>
           <input id="meta_api_token" name="meta_api_token" type="password" autocomplete="off" placeholder="EAAB...">
           <label for="extra_env">מפתחות נוספים</label>
           <textarea id="extra_env" name="extra_env" autocomplete="off" spellcheck="false" placeholder="KEY=value&#10;ANOTHER_TOKEN=value"></textarea>
+          <div class="row">
+            <input id="final_smoke" name="smoke" type="checkbox" value="1" checked>
+            <label for="final_smoke">להריץ smoke אחרי האתחול הסופי</label>
+          </div>
           <button type="submit">שמור וסיים</button>
           <button class="secondary" type="submit" name="skip_env" value="1">דלג וסיים</button>
         </form>
@@ -217,6 +240,8 @@ def html_page(
 
     if step == "oauth" and safe_oauth_url:
         main_block = oauth_block
+    elif step == "device":
+        main_block = device_block
     elif step == "telegram":
         main_block = telegram_block
     elif step == "env":
@@ -464,11 +489,46 @@ class ProvisionHandler(BaseHTTPRequestHandler):
         env_path.write_text("\n".join(new_lines) + "\n", encoding="utf-8")
         env_path.chmod(0o600)
 
-        restart_code, restart_output = self.restart_client(slug)
         summary = "=== Client ENV update ===\n"
         summary += "Updated keys: " + ", ".join(sorted(updates)) + "\n"
-        summary += "\n" + restart_output
-        return restart_code, redact(summary, list(updates.values()))
+        summary += "Client restart deferred until final wizard step.\n"
+        return 0, redact(summary, list(updates.values()))
+
+    def finalize_client(self, slug: str, run_smoke: bool) -> tuple[int, str]:
+        restart_code, restart_output = self.restart_client(slug)
+        combined = "=== Final client restart ===\n" + restart_output
+        status_code = restart_code
+        if status_code == 0 and run_smoke:
+            container = self.find_container(slug)
+            if not container:
+                return 1, combined + f"\nNo running container found for {project_name(slug)} after restart."
+            smoke_proc = subprocess.run(
+                [
+                    "docker",
+                    "exec",
+                    container,
+                    "openclaw",
+                    "agent",
+                    "--agent",
+                    "main",
+                    "--session-id",
+                    f"smoke-final-{slug}",
+                    "-m",
+                    "Reply exactly OK_OPENCLAW_FINAL",
+                    "--json",
+                ],
+                text=True,
+                capture_output=True,
+                timeout=180,
+                check=False,
+            )
+            combined += "\n\n=== Final agent smoke ===\n" + command_output(smoke_proc)
+            if smoke_proc.returncode != 0:
+                combined += (
+                    f"\n\nFinal smoke exit code: {smoke_proc.returncode}. "
+                    "The client restart completed; smoke failures are reported as warnings."
+                )
+        return status_code, combined
 
     def restart_client(self, slug: str) -> tuple[int, str]:
         container = self.find_container(slug)
@@ -640,10 +700,9 @@ class ProvisionHandler(BaseHTTPRequestHandler):
             order_code, order_output = self.set_openai_codex_auth_order(slug)
             combined += "\n\n" + order_output
             if order_code != 0:
-                combined += "\nAuth order was not updated; continuing with restart."
-            restart_code, restart_output = self.restart_client(slug)
-            combined += "\n\n" + restart_output
-            status_code = max(status_code, restart_code)
+                combined += "\nAuth order was not updated; continuing without restart."
+            combined += "\nClient restart deferred until final wizard step."
+            status_code = max(status_code, order_code)
 
         return status_code, redact(combined, [pairing_code])
 
@@ -661,24 +720,24 @@ class ProvisionHandler(BaseHTTPRequestHandler):
         helper_dst.chmod(0o700)
 
     def stop_previous_oauth(self, state_dir: Path) -> None:
-        pid_file = state_dir / "openai-codex-oauth.pid"
-        if not pid_file.exists():
-            return
-        try:
-            pid = int(pid_file.read_text(encoding="utf-8").strip())
-        except ValueError:
-            pid_file.unlink(missing_ok=True)
-            return
-        try:
-            os.kill(pid, 0)
-        except OSError:
-            pid_file.unlink(missing_ok=True)
-            return
-        try:
-            os.killpg(pid, signal.SIGTERM)
-        except OSError:
-            pass
-        time.sleep(0.4)
+        for pid_file in (state_dir / "openai-codex-oauth.pid", state_dir / "openai-codex-device-code.pid"):
+            if not pid_file.exists():
+                continue
+            try:
+                pid = int(pid_file.read_text(encoding="utf-8").strip())
+            except ValueError:
+                pid_file.unlink(missing_ok=True)
+                continue
+            try:
+                os.kill(pid, 0)
+            except OSError:
+                pid_file.unlink(missing_ok=True)
+                continue
+            try:
+                os.killpg(pid, signal.SIGTERM)
+            except OSError:
+                pass
+            time.sleep(0.4)
 
     def start_oauth(self, slug: str) -> tuple[str, str]:
         self.install_oauth_helper(slug)
@@ -719,6 +778,63 @@ class ProvisionHandler(BaseHTTPRequestHandler):
         if log_path.exists():
             output = log_path.read_text(encoding="utf-8", errors="replace")
         raise RuntimeError("OAuth URL was not produced.\n\n" + output[-4000:])
+
+    def start_device_code(self, slug: str) -> str:
+        self.install_oauth_helper(slug)
+        container = self.find_container(slug)
+        if not container:
+            raise RuntimeError(f"No running container found for {project_name(slug)}")
+
+        state_dir = self.state_dir(slug)
+        state_dir.mkdir(mode=0o700, parents=True, exist_ok=True)
+        self.stop_previous_oauth(state_dir)
+
+        log_path = state_dir / "openai-codex-device-code.log"
+        status_path = state_dir / "openai-codex-device-code.status"
+        pid_path = state_dir / "openai-codex-device-code.pid"
+        for path in (log_path, status_path):
+            path.unlink(missing_ok=True)
+
+        cmd = (
+            f"docker exec {shlex.quote(container)} bash /data/openclaw-codex-oauth-chat.sh device-code "
+            f">{shlex.quote(str(log_path))} 2>&1; "
+            f"printf '%s\\n' \"$?\" > {shlex.quote(str(status_path))}"
+        )
+        proc = subprocess.Popen(["bash", "-lc", cmd], start_new_session=True)
+        pid_path.write_text(str(proc.pid) + "\n", encoding="utf-8")
+        pid_path.chmod(0o600)
+
+        output = ""
+        for _ in range(12):
+            if log_path.exists():
+                output = log_path.read_text(encoding="utf-8", errors="replace")
+                if output.strip():
+                    break
+            time.sleep(0.5)
+        return output or "Device-code auth process started. Refresh/check in a few seconds."
+
+    def check_device_code(self, slug: str) -> tuple[int | None, str]:
+        state_dir = self.state_dir(slug)
+        log_path = state_dir / "openai-codex-device-code.log"
+        status_path = state_dir / "openai-codex-device-code.status"
+        output = ""
+        if log_path.exists():
+            output = log_path.read_text(encoding="utf-8", errors="replace")
+        if not status_path.exists():
+            return None, output or "Device-code auth is still running."
+
+        raw_status = status_path.read_text(encoding="utf-8", errors="replace").strip()
+        if not raw_status.isdigit():
+            return 1, output + f"\nUnexpected device-code status: {raw_status}"
+
+        status_code = int(raw_status)
+        if status_code == 0:
+            order_code, order_output = self.set_openai_codex_auth_order(slug)
+            output += "\n\n" + order_output
+            if order_code == 0:
+                output += "\nClient restart deferred until final wizard step."
+            return max(status_code, order_code), output
+        return status_code, output
 
     def finish_oauth(self, slug: str, callback_url: str, run_smoke: bool) -> tuple[int, str]:
         if not CALLBACK_RE.match(callback_url):
@@ -776,38 +892,9 @@ class ProvisionHandler(BaseHTTPRequestHandler):
             status_code = max(status_code, order_code)
 
         if status_code == 0:
-            restart_code, restart_output = self.restart_client(slug)
-            combined += "\n\n" + restart_output
-            status_code = max(status_code, restart_code)
-
-        if status_code == 0 and run_smoke:
-            smoke_proc = subprocess.run(
-                [
-                    "docker",
-                    "exec",
-                    container,
-                    "openclaw",
-                    "agent",
-                    "--agent",
-                    "main",
-                    "--session-id",
-                    f"smoke-oauth-{slug}",
-                    "-m",
-                    "Reply exactly OK_OPENCLAW_OAUTH",
-                    "--json",
-                ],
-                text=True,
-                capture_output=True,
-                timeout=180,
-                check=False,
-            )
-            combined += "\n\n=== Agent smoke ===\n" + command_output(smoke_proc)
-            if smoke_proc.returncode != 0:
-                combined += (
-                    f"\n\nAgent smoke exit code: {smoke_proc.returncode}. "
-                    "OAuth, auth order, and client restart completed; smoke failures are reported as warnings, "
-                    "not as OAuth failures."
-                )
+            combined += "\nClient restart deferred until final wizard step."
+            if run_smoke:
+                combined += "\nSmoke check deferred until the final restart."
 
         return status_code, redact(combined, [callback_url])
 
@@ -833,6 +920,9 @@ class ProvisionHandler(BaseHTTPRequestHandler):
         if parsed.path == "/oauth-finish":
             self.handle_oauth_finish()
             return
+        if parsed.path == "/device-check":
+            self.handle_device_check()
+            return
         if parsed.path == "/telegram-approve":
             self.handle_telegram_approve()
             return
@@ -848,15 +938,31 @@ class ProvisionHandler(BaseHTTPRequestHandler):
             return
 
         slug = slugify(fields.get("slug", ""))
+        smoke = fields.get("smoke") == "1"
         if not SLUG_RE.match(slug):
             self.send_html(html_page(self.server.admin_token, "שם לקוח לא תקין.", step="create"))
             return
 
         if fields.get("skip_env") == "1":
+            code, output = self.finalize_client(slug, smoke)
+            if code != 0:
+                self.send_html(
+                    html_page(
+                        self.server.admin_token,
+                        f"לקוח `{slug}` נשמר, אבל האתחול הסופי נכשל עם exit code {code}",
+                        output,
+                        step="env",
+                        slug=slug,
+                        public_url=self.client_public_url(slug),
+                    ),
+                    status=500,
+                )
+                return
             self.send_html(
                 html_page(
                     self.server.admin_token,
                     f"לקוח `{slug}` הושלם ללא מפתחות ENV נוספים.",
+                    output,
                     step="complete",
                     slug=slug,
                     public_url=self.client_public_url(slug),
@@ -874,10 +980,25 @@ class ProvisionHandler(BaseHTTPRequestHandler):
                     raise ValueError("Meta API Token cannot contain newlines.")
                 updates["META_API_TOKEN"] = meta_api_token
             if not updates:
+                code, output = self.finalize_client(slug, smoke)
+                if code != 0:
+                    self.send_html(
+                        html_page(
+                            self.server.admin_token,
+                            f"לקוח `{slug}` נשמר, אבל האתחול הסופי נכשל עם exit code {code}",
+                            output,
+                            step="env",
+                            slug=slug,
+                            public_url=self.client_public_url(slug),
+                        ),
+                        status=500,
+                    )
+                    return
                 self.send_html(
                     html_page(
                         self.server.admin_token,
                         f"לקוח `{slug}` הושלם ללא מפתחות ENV נוספים.",
+                        output,
                         step="complete",
                         slug=slug,
                         public_url=self.client_public_url(slug),
@@ -888,6 +1009,21 @@ class ProvisionHandler(BaseHTTPRequestHandler):
 
             code, output = self.upsert_client_env(slug, updates)
             if code == 0:
+                final_code, final_output = self.finalize_client(slug, smoke)
+                output += "\n\n" + final_output
+                if final_code != 0:
+                    self.send_html(
+                        html_page(
+                            self.server.admin_token,
+                            f"מפתחות ENV עבור `{slug}` נשמרו, אבל האתחול הסופי נכשל עם exit code {final_code}",
+                            output,
+                            step="env",
+                            slug=slug,
+                            public_url=self.client_public_url(slug),
+                        ),
+                        status=500,
+                    )
+                    return
                 self.send_html(
                     html_page(
                         self.server.admin_token,
@@ -1027,6 +1163,67 @@ class ProvisionHandler(BaseHTTPRequestHandler):
                 status=500,
             )
 
+    def handle_device_check(self) -> None:
+        fields = self.form_fields()
+        if not self.valid_token(fields.get("token")):
+            self.send_html(b"Forbidden", status=403)
+            return
+
+        slug = slugify(fields.get("slug", ""))
+        if not SLUG_RE.match(slug):
+            self.send_html(html_page(self.server.admin_token, "שם לקוח לא תקין.", step="create"))
+            return
+
+        try:
+            code, output = self.check_device_code(slug)
+            if code is None:
+                self.send_html(
+                    html_page(
+                        self.server.admin_token,
+                        f"חיבור Device Code עבור `{slug}` עדיין ממתין לאישור.",
+                        output,
+                        step="device",
+                        oauth_slug=slug,
+                        public_url=self.client_public_url(slug),
+                    )
+                )
+                return
+            if code == 0:
+                self.send_html(
+                    html_page(
+                        self.server.admin_token,
+                        f"חיבור OpenAI עבור `{slug}` הצליח. עכשיו אשר את ה־Telegram pairing.",
+                        output,
+                        step="telegram",
+                        slug=slug,
+                        public_url=self.client_public_url(slug),
+                    )
+                )
+                return
+            self.send_html(
+                html_page(
+                    self.server.admin_token,
+                    f"חיבור Device Code עבור `{slug}` נכשל עם exit code {code}",
+                    output,
+                    step="device",
+                    oauth_slug=slug,
+                    public_url=self.client_public_url(slug),
+                ),
+                status=500,
+            )
+        except Exception as exc:
+            self.send_html(
+                html_page(
+                    self.server.admin_token,
+                    "בדיקת Device Code נכשלה.",
+                    str(exc),
+                    step="device",
+                    oauth_slug=slug,
+                    public_url=self.client_public_url(slug),
+                ),
+                status=500,
+            )
+
     def handle_create(self) -> None:
         fields = self.form_fields()
         if not self.valid_token(fields.get("token")):
@@ -1045,7 +1242,7 @@ class ProvisionHandler(BaseHTTPRequestHandler):
         if not SLUG_RE.match(slug):
             self.send_html(html_page(self.server.admin_token, "שם הלקוח לא תקין אחרי ניקוי. השתמש באנגלית/מספרים/מקפים.", step="create"))
             return
-        if auth_method not in {"oauth", "api_key"}:
+        if auth_method not in {"oauth", "device_code", "api_key"}:
             self.send_html(html_page(self.server.admin_token, "שיטת חיבור מודל לא תקינה.", step="create"))
             return
         if not telegram_bot_token:
@@ -1057,8 +1254,8 @@ class ProvisionHandler(BaseHTTPRequestHandler):
         if not validate_no_newline(openai_api_key, telegram_bot_token):
             self.send_html(html_page(self.server.admin_token, "המפתחות לא יכולים לכלול ירידת שורה.", step="create"))
             return
-        if auth_method == "oauth" and not start and not dry_run:
-            self.send_html(html_page(self.server.admin_token, "OAuth דורש להפעיל את הקונטיינר כדי להריץ auth בתוך הלקוח.", step="create"))
+        if auth_method in {"oauth", "device_code"} and not start and not dry_run:
+            self.send_html(html_page(self.server.admin_token, "חיבור OpenAI דורש להפעיל את הקונטיינר כדי להריץ auth בתוך הלקוח.", step="create"))
             return
 
         temp_dir = Path(tempfile.mkdtemp(prefix="openclaw-client-env-"))
@@ -1119,6 +1316,27 @@ class ProvisionHandler(BaseHTTPRequestHandler):
                 except Exception as exc:
                     combined += "\n\n=== OAuth start failed ===\n" + redact(str(exc), sensitive_values)
                     self.send_html(html_page(self.server.admin_token, f"לקוח `{slug}` נוצר, אבל התחלת OAuth נכשלה.", combined, step="create", slug=slug), status=500)
+                    return
+
+            if auth_method == "device_code" and not dry_run:
+                try:
+                    device_output = self.start_device_code(slug)
+                    combined += "\n\n=== Device-code auth start ===\n" + device_output
+                    self.send_html(
+                        html_page(
+                            self.server.admin_token,
+                            f"לקוח `{slug}` נוצר. השלם את חיבור OpenAI עם Device Code.",
+                            combined,
+                            step="device",
+                            slug=slug,
+                            oauth_slug=slug,
+                            public_url=self.client_public_url(slug),
+                        )
+                    )
+                    return
+                except Exception as exc:
+                    combined += "\n\n=== Device-code auth start failed ===\n" + redact(str(exc), sensitive_values)
+                    self.send_html(html_page(self.server.admin_token, f"לקוח `{slug}` נוצר, אבל התחלת Device Code נכשלה.", combined, step="create", slug=slug), status=500)
                     return
 
             status = "הצליח" if proc.returncode == 0 else f"נכשל עם exit code {proc.returncode}"

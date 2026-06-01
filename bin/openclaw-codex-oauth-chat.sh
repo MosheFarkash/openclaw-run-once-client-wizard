@@ -111,7 +111,7 @@ finish_oauth() {
 device_code() {
   require_openclaw
   require_script_command
-  script -qefc "openclaw models auth login --provider openai-codex --method device-code --set-default" /dev/null
+  script -qefc "openclaw models auth login --provider openai-codex --device-code --set-default" /dev/null
 }
 
 cmd="${1:-}"
