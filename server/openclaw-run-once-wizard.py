@@ -388,21 +388,13 @@ def parse_extra_env(text_value: str) -> dict[str, str]:
 
 def extract_device_auth(output: str) -> tuple[str, str]:
     clean_output = ANSI_RE.sub("", output).replace("\r", "\n")
-    urls = DEVICE_LABEL_URL_RE.findall(clean_output) or DEVICE_URL_RE.findall(clean_output)
+    urls = DEVICE_LABEL_URL_RE.findall(clean_output)
     auth_url = ""
     for url in urls:
         lowered = url.lower()
-        if "auth.openai.com" in lowered and "device" in lowered:
+        if lowered.rstrip(" .,:;)") == "https://auth.openai.com/codex/device":
             auth_url = url.rstrip(" .,:;)")
             break
-    if not auth_url:
-        for url in urls:
-            lowered = url.lower()
-            if "openai" in lowered or "device" in lowered or "auth" in lowered:
-                auth_url = url.rstrip(" .,:;)")
-                break
-    if not auth_url and urls:
-        auth_url = urls[0].rstrip(" .,:;)")
 
     code = ""
     code_match = DEVICE_LABEL_CODE_RE.search(clean_output)
@@ -410,6 +402,25 @@ def extract_device_auth(output: str) -> tuple[str, str]:
         code = code_match.group(1).strip(" .,:;").upper()
 
     return auth_url, code
+
+
+def summarize_device_auth_failure(output: str) -> str:
+    clean_output = ANSI_RE.sub("", output).replace("\r", "\n")
+    if "OpenAI device code request failed" in clean_output:
+        if "HTTP 403" in clean_output and "Just a moment" in clean_output:
+            return "בקשת Device Code נחסמה על ידי Cloudflare/OpenAI מה־VPS. אין קוד אימות אמיתי לפתיחה."
+        if "HTTP 429" in clean_output and "Just a moment" in clean_output:
+            return "בדיקת Device Code נחסמה זמנית על ידי Cloudflare/OpenAI מה־VPS. אין קוד אימות אמיתי לפתיחה."
+        match = re.search(r"OpenAI device code request failed: ([^\n]+)", clean_output)
+        if match:
+            return match.group(1)[:240]
+    if "OpenAI device authorization failed" in clean_output:
+        if "HTTP 429" in clean_output and "Just a moment" in clean_output:
+            return "בדיקת האישור מול OpenAI נחסמה זמנית על ידי Cloudflare/OpenAI מה־VPS."
+        match = re.search(r"OpenAI device authorization failed: ([^\n]+)", clean_output)
+        if match:
+            return match.group(1)[:240]
+    return "Device Code נכשל לפני שהתקבלו URL וקוד אימות אמיתיים."
 
 
 class ProvisionHandler(BaseHTTPRequestHandler):
@@ -854,7 +865,7 @@ class ProvisionHandler(BaseHTTPRequestHandler):
             return auth_url, device_code, output
         if auth_url:
             raise RuntimeError("Device-code auth URL was produced, but the verification code was not found yet.\n\n" + output[-4000:])
-        raise RuntimeError("Device-code auth URL was not produced.\n\n" + output[-4000:])
+        raise RuntimeError(summarize_device_auth_failure(output))
 
     def check_device_code(self, slug: str) -> tuple[int | None, str, str, str]:
         state_dir = self.state_dir(slug)
@@ -880,8 +891,7 @@ class ProvisionHandler(BaseHTTPRequestHandler):
                 output += "\nClient restart deferred until final wizard step."
             auth_url, device_code = extract_device_auth(output)
             return max(status_code, order_code), output, auth_url, device_code
-        auth_url, device_code = extract_device_auth(output)
-        return status_code, output, auth_url, device_code
+        return status_code, summarize_device_auth_failure(output), "", ""
 
     def finish_oauth(self, slug: str, callback_url: str, run_smoke: bool) -> tuple[int, str]:
         if not CALLBACK_RE.match(callback_url):
@@ -1251,11 +1261,9 @@ class ProvisionHandler(BaseHTTPRequestHandler):
             self.send_html(
                 html_page(
                     self.server.admin_token,
-                    f"חיבור Device Code עבור `{slug}` נכשל עם exit code {code}",
+                    f"חיבור Device Code עבור `{slug}` נכשל: {output}",
                     step="device",
                     oauth_slug=slug,
-                    oauth_url=auth_url,
-                    device_code=device_code,
                     public_url=self.client_public_url(slug),
                 ),
                 status=500,
@@ -1386,7 +1394,16 @@ class ProvisionHandler(BaseHTTPRequestHandler):
                     return
                 except Exception as exc:
                     combined += "\n\n=== Device-code auth start failed ===\n" + redact(str(exc), sensitive_values)
-                    self.send_html(html_page(self.server.admin_token, f"לקוח `{slug}` נוצר, אבל התחלת Device Code נכשלה.", combined, step="create", slug=slug), status=500)
+                    self.send_html(
+                        html_page(
+                            self.server.admin_token,
+                            f"לקוח `{slug}` נוצר, אבל התחלת Device Code נכשלה: {redact(str(exc), sensitive_values)}",
+                            step="create",
+                            slug=slug,
+                            public_url=self.client_public_url(slug),
+                        ),
+                        status=500,
+                    )
                     return
 
             status = "הצליח" if proc.returncode == 0 else f"נכשל עם exit code {proc.returncode}"
