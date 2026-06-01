@@ -129,6 +129,23 @@ WantedBy=multi-user.target
 EOF
 
 python3 -m py_compile "$FORM_PATH"
+TOKEN_FILE="$TOKEN_FILE" python3 - <<'PY'
+from pathlib import Path
+import os
+import re
+import secrets
+
+path = Path(os.environ["TOKEN_FILE"])
+token_re = re.compile(r"^[A-Za-z0-9_.:-]{12,}$")
+if path.exists():
+    token = path.read_text(encoding="utf-8").strip()
+    if token_re.match(token):
+        raise SystemExit(0)
+
+path.parent.mkdir(parents=True, exist_ok=True)
+path.write_text(secrets.token_urlsafe(32) + "\n", encoding="utf-8")
+path.chmod(0o600)
+PY
 systemctl daemon-reload
 systemctl enable --now "$SERVICE_NAME" >/dev/null
 systemctl is-active --quiet "$SERVICE_NAME"
