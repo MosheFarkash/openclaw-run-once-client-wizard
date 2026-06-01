@@ -231,7 +231,7 @@ new_token() {
 write_agent_bootstrap_files() {
   local workspace_dir="$1"
 
-  mkdir -p "$workspace_dir/skills/client-profile" "$workspace_dir/skills/client-operating-rules" "$workspace_dir/memory"
+  mkdir -p "$workspace_dir/skills/client-profile" "$workspace_dir/skills/client-operating-rules" "$workspace_dir/memory" "$workspace_dir/scripts"
 
   cat > "$workspace_dir/AGENTS.md" <<'EOF'
 # AGENTS.md - Client Agent Workspace
@@ -262,11 +262,20 @@ This workspace has been pre-seeded for a client OpenClaw agent.
 
 This file is the one-time first-run prompt. Do this only while `BOOTSTRAP.md` exists:
 
-1. Read `skills/client-profile/SKILL.md`.
-2. Read `skills/client-operating-rules/SKILL.md`.
-3. Treat those two files as the client knowledge base and operating policy.
-4. If important client context is missing, ask only the minimum useful questions.
-5. Save important answers into the relevant workspace files.
+1. Open and read `skills/client-profile/SKILL.md`.
+2. Open and read `skills/client-operating-rules/SKILL.md`.
+3. Learn both files and load them as active skills for this client.
+4. Treat those two files as the client knowledge base and operating policy.
+5. If important client context is missing, ask only the minimum useful questions.
+6. Save important answers into the relevant workspace files.
+
+If the user asks: "תקרא את ה-meta token שלך ותגיד לי לאיזה חשבונות יש לך גישה", run:
+
+```bash
+bash scripts/meta-token-accounts.sh
+```
+
+Never print the `META_API_TOKEN` value. Report only accessible account IDs, names, status, currency, and timezone.
 
 After the first onboarding conversation is complete and the client profile/rules are usable, delete this `BOOTSTRAP.md` file. Future sessions should not repeat this onboarding read unless the user asks or the task needs those files.
 EOF
@@ -303,7 +312,94 @@ Record local operational notes here:
 - Project paths
 - Common commands
 - Gotchas learned during setup
+
+## Commands
+
+Check which Meta ad accounts the configured token can access:
+
+```bash
+bash scripts/meta-token-accounts.sh
+```
+
+This reads `META_API_TOKEN` from the environment and never prints the token.
 EOF
+
+  cat > "$workspace_dir/scripts/meta-token-accounts.sh" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+
+if [[ -z "${META_API_TOKEN:-}" ]]; then
+  echo "META_API_TOKEN is not set in this OpenClaw container."
+  exit 1
+fi
+
+command -v curl >/dev/null 2>&1 || {
+  echo "curl is required but is not installed."
+  exit 1
+}
+
+tmp="$(mktemp)"
+trap 'rm -f "$tmp"' EXIT
+
+http_code="$(
+  curl -sS -G \
+    --data-urlencode "fields=id,account_id,name,account_status,currency,timezone_name,business_name" \
+    --data-urlencode "limit=200" \
+    --data-urlencode "access_token=${META_API_TOKEN}" \
+    -o "$tmp" \
+    -w "%{http_code}" \
+    "https://graph.facebook.com/v20.0/me/adaccounts" || true
+)"
+
+python3 - "$http_code" "$tmp" <<'PY'
+import json
+import sys
+
+http_code = sys.argv[1]
+path = sys.argv[2]
+raw = open(path, "r", encoding="utf-8", errors="replace").read()
+try:
+    payload = json.loads(raw) if raw.strip() else {}
+except json.JSONDecodeError:
+    print(f"Meta API returned HTTP {http_code}, but the response was not JSON.")
+    print(raw[:1000])
+    sys.exit(1)
+
+if int(http_code or 0) >= 400 or "error" in payload:
+    error = payload.get("error") if isinstance(payload, dict) else {}
+    message = error.get("message") if isinstance(error, dict) else ""
+    code = error.get("code") if isinstance(error, dict) else ""
+    print(f"Meta API request failed. HTTP {http_code}. Code: {code}. Message: {message}")
+    sys.exit(1)
+
+accounts = payload.get("data") if isinstance(payload, dict) else None
+if not accounts:
+    print("No ad accounts were returned for this META_API_TOKEN.")
+    sys.exit(0)
+
+print("Accessible Meta ad accounts:")
+for account in accounts:
+    account_id = account.get("account_id") or str(account.get("id", "")).removeprefix("act_")
+    full_id = account.get("id") or (f"act_{account_id}" if account_id else "")
+    name = account.get("name") or ""
+    status = account.get("account_status")
+    currency = account.get("currency") or ""
+    timezone = account.get("timezone_name") or ""
+    business = account.get("business_name") or ""
+    parts = [
+        f"id={full_id}",
+        f"account_id={account_id}",
+        f"name={name}",
+        f"status={status}",
+        f"currency={currency}",
+        f"timezone={timezone}",
+    ]
+    if business:
+        parts.append(f"business={business}")
+    print("- " + " | ".join(parts))
+PY
+EOF
+  chmod +x "$workspace_dir/scripts/meta-token-accounts.sh"
 
   cat > "$workspace_dir/skills/client-profile/SKILL.md" <<'EOF'
 # Client Profile

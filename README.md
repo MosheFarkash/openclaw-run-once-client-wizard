@@ -72,9 +72,16 @@ Provisioned clients are created with `session.resetByType.direct.mode = "idle"` 
 Provisioned clients also get a persistent agent workspace under `/data/.openclaw/workspace` with:
 
 - `AGENTS.md` and `BOOTSTRAP.md`,
+- `scripts/meta-token-accounts.sh`,
 - `skills/client-profile/SKILL.md`,
 - `skills/client-operating-rules/SKILL.md`.
 
 Only `BOOTSTRAP.md` tells the agent to read and learn the two client skill files. After first onboarding, the agent deletes `BOOTSTRAP.md`; `AGENTS.md` keeps only general workspace safety/memory guidance and does not force the skill-read on every session.
+
+The Meta account helper reads `META_API_TOKEN` from the container environment and reports accessible ad accounts without printing the token:
+
+```bash
+bash scripts/meta-token-accounts.sh
+```
 
 For public self-serve/payment-gated onboarding, use a separate Cardcom/session gate before exposing any wizard URL.
