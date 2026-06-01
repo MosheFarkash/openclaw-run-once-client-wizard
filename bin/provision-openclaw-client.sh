@@ -236,16 +236,11 @@ write_agent_bootstrap_files() {
   cat > "$workspace_dir/AGENTS.md" <<'EOF'
 # AGENTS.md - Client Agent Workspace
 
-## Every Session
+## Startup
 
-Before answering the user, read these workspace files:
+If `BOOTSTRAP.md` exists, follow it first. It is the only place that performs the first-run client onboarding and skill-reading flow.
 
-1. `skills/client-profile/SKILL.md`
-2. `skills/client-operating-rules/SKILL.md`
-3. `USER.md`
-4. `memory/YYYY-MM-DD.md` for today and yesterday, if they exist
-
-If `BOOTSTRAP.md` exists, follow it first.
+Do not reread the client onboarding skills on every session by default. Use them when the current task needs client business context or operating rules.
 
 ## Memory
 
@@ -265,14 +260,15 @@ EOF
 
 This workspace has been pre-seeded for a client OpenClaw agent.
 
-Before the first normal reply:
+This file is the one-time first-run prompt. Do this only while `BOOTSTRAP.md` exists:
 
 1. Read `skills/client-profile/SKILL.md`.
 2. Read `skills/client-operating-rules/SKILL.md`.
 3. Treat those two files as the client knowledge base and operating policy.
 4. If important client context is missing, ask only the minimum useful questions.
+5. Save important answers into the relevant workspace files.
 
-After the first onboarding conversation is complete, update the relevant files with what you learned. If the client profile and operating rules are usable, delete this `BOOTSTRAP.md` file so future sessions follow `AGENTS.md` directly.
+After the first onboarding conversation is complete and the client profile/rules are usable, delete this `BOOTSTRAP.md` file. Future sessions should not repeat this onboarding read unless the user asks or the task needs those files.
 EOF
 
   cat > "$workspace_dir/SOUL.md" <<'EOF'

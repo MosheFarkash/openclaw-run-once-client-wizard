@@ -75,6 +75,6 @@ Provisioned clients also get a persistent agent workspace under `/data/.openclaw
 - `skills/client-profile/SKILL.md`,
 - `skills/client-operating-rules/SKILL.md`.
 
-The bootstrap tells the agent to read the two client skill files before normal replies and to update them during onboarding.
+Only `BOOTSTRAP.md` tells the agent to read and learn the two client skill files. After first onboarding, the agent deletes `BOOTSTRAP.md`; `AGENTS.md` keeps only general workspace safety/memory guidance and does not force the skill-read on every session.
 
 For public self-serve/payment-gated onboarding, use a separate Cardcom/session gate before exposing any wizard URL.
