@@ -39,6 +39,29 @@ need_cmd() {
   command -v "$1" >/dev/null 2>&1 || die "missing required command: $1"
 }
 
+detect_public_ip() {
+  local ip=""
+
+  if [[ -n "${SSH_CONNECTION:-}" ]]; then
+    # SSH_CONNECTION fields: client_ip client_port server_ip server_port.
+    ip="$(awk '{print $3}' <<<"$SSH_CONNECTION")"
+  fi
+
+  if [[ -z "$ip" ]] && command -v curl >/dev/null 2>&1; then
+    ip="$(curl -4fsS --max-time 3 https://api.ipify.org 2>/dev/null || true)"
+  fi
+
+  if [[ -z "$ip" ]]; then
+    ip="$(hostname -I 2>/dev/null | awk '{print $1}')"
+  fi
+
+  if [[ "$ip" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+    printf '%s\n' "$ip"
+  else
+    printf 'CLIENT_VPS_IP\n'
+  fi
+}
+
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --bind)
@@ -153,11 +176,12 @@ systemctl is-active --quiet "$SERVICE_NAME"
 
 token="$(cat "$TOKEN_FILE")"
 local_url="http://${BIND}:${PORT}/?token=${token}"
+vps_ip="$(detect_public_ip)"
 
 printf '\nOpenClaw run-once wizard is ready.\n\n'
 printf 'Local URL on the VPS:\n%s\n\n' "$local_url"
 printf 'Recommended secure access from your computer:\n'
-printf 'ssh -L %s:127.0.0.1:%s root@CLIENT_VPS_IP\n' "$PORT" "$PORT"
+printf 'ssh -L %s:127.0.0.1:%s root@%s\n' "$PORT" "$PORT" "$vps_ip"
 printf 'Then open:\nhttp://127.0.0.1:%s/?token=%s\n\n' "$PORT" "$token"
 
 if [[ "$SELF_DESTRUCT" == "1" ]]; then
