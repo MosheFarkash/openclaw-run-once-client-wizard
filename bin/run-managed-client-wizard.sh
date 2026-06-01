@@ -39,6 +39,27 @@ need_cmd() {
   command -v "$1" >/dev/null 2>&1 || die "missing required command: $1"
 }
 
+stop_legacy_wizards() {
+  # Older installer builds used a different service/script name. If one is
+  # still running, it can keep 127.0.0.1:8099 occupied and make the new wizard
+  # look like it has the wrong token.
+  systemctl disable --now openclaw-client-form.service >/dev/null 2>&1 || true
+  rm -f /etc/systemd/system/openclaw-client-form.service
+
+  local pid cmdline
+  while IFS= read -r pid; do
+    [[ -n "$pid" ]] || continue
+    cmdline="$(tr '\0' ' ' <"/proc/$pid/cmdline" 2>/dev/null || true)"
+    case "$cmdline" in
+      *"/root/openclaw-client-form.py"*|*"/usr/local/bin/provision-openclaw-client"*)
+        kill "$pid" 2>/dev/null || true
+        ;;
+    esac
+  done < <(pgrep -f "openclaw-client-form.py|provision-openclaw-client" 2>/dev/null || true)
+
+  systemctl daemon-reload >/dev/null 2>&1 || true
+}
+
 detect_public_ip() {
   local ip=""
 
@@ -93,6 +114,7 @@ need_cmd docker
 docker compose version >/dev/null 2>&1 || die "docker compose plugin is required"
 need_cmd python3
 need_cmd systemctl
+stop_legacy_wizards
 
 PACKAGE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 [[ -f "$PACKAGE_DIR/bin/provision-openclaw-client.sh" ]] || die "missing provisioner script"
