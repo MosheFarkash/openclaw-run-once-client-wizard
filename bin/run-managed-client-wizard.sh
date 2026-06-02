@@ -122,7 +122,6 @@ PACKAGE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 [[ -f "$PACKAGE_DIR/bin/openclaw-codex-oauth-chat.sh" ]] || die "missing OAuth helper"
 [[ -f "$PACKAGE_DIR/server/openclaw-run-once-wizard.py" ]] || die "missing run-once wizard server"
 [[ -d "$PACKAGE_DIR/assets/client-agent-workspace" ]] || die "missing client agent bootstrap assets"
-[[ -d "$PACKAGE_DIR/assets/agency-pack/ai-ad-agency-pack" ]] || die "missing ai-ad-agency-pack assets"
 
 install -m 755 "$PACKAGE_DIR/bin/provision-openclaw-client.sh" "$PROVISION_CMD"
 install -m 755 "$PACKAGE_DIR/bin/openclaw-codex-oauth-chat.sh" "$OAUTH_HELPER"

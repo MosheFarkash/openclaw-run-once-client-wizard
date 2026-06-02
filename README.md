@@ -73,9 +73,6 @@ Provisioned clients also get a persistent agent workspace under `/data/.openclaw
 
 - `AGENTS.md` and `BOOTSTRAP.md`,
 - `scripts/meta-token-accounts.sh`,
-- `scripts/create-agency-client.sh`,
-- `packs/ai-ad-agency-pack/`,
-- global OpenClaw skill `client-ads-manager`,
 - `skills/meta-andromeda-ads-strategy/SKILL.md`,
 - `skills/ad-creative-agent/SKILL.md` plus references,
 - helper skills from the creative workshop bundle, including Google Drive and image model setup.
@@ -86,12 +83,6 @@ The Meta account helper reads `META_API_TOKEN` from the container environment an
 
 ```bash
 bash scripts/meta-token-accounts.sh
-```
-
-The provisioned client also receives the AI Ad Agency Pack as their own agency tool. To create a separate client agent/group inside their OpenClaw:
-
-```bash
-bash scripts/create-agency-client.sh "Client Name" whatsapp "GROUP_ID"
 ```
 
 For public self-serve/payment-gated onboarding, use a separate Cardcom/session gate before exposing any wizard URL.
