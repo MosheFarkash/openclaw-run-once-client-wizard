@@ -232,9 +232,12 @@ write_agent_bootstrap_files() {
   local workspace_dir="$1"
   local package_dir
   local assets_dir=""
+  local agency_pack_dir=""
+  local state_dir
   local candidate
 
   package_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+  state_dir="$(dirname "$workspace_dir")"
 
   for candidate in \
     "${CLIENT_AGENT_ASSETS_DIR:-}" \
@@ -248,8 +251,24 @@ write_agent_bootstrap_files() {
 
   [[ -n "$assets_dir" ]] || die "missing client agent bootstrap assets"
 
-  mkdir -p "$workspace_dir/memory" "$workspace_dir/scripts"
+  for candidate in \
+    "${AGENCY_PACK_ASSETS_DIR:-}" \
+    "$package_dir/assets/agency-pack/ai-ad-agency-pack" \
+    "/usr/local/share/openclaw-run-once-client-wizard/assets/agency-pack/ai-ad-agency-pack"; do
+    if [[ -n "$candidate" && -d "$candidate" ]]; then
+      agency_pack_dir="$candidate"
+      break
+    fi
+  done
+
+  [[ -n "$agency_pack_dir" ]] || die "missing ai-ad-agency-pack assets"
+
+  mkdir -p "$workspace_dir/memory" "$workspace_dir/scripts" "$workspace_dir/packs" "$state_dir/skills"
   cp -a "$assets_dir"/. "$workspace_dir"/
+  rm -rf "$workspace_dir/packs/ai-ad-agency-pack" "$state_dir/skills/client-ads-manager"
+  cp -a "$agency_pack_dir" "$workspace_dir/packs/ai-ad-agency-pack"
+  cp -a "$agency_pack_dir/skills/client-ads-manager" "$state_dir/skills/client-ads-manager"
+  chmod +x "$workspace_dir/packs/ai-ad-agency-pack/scripts/"*.sh 2>/dev/null || true
 
   cat > "$workspace_dir/AGENTS.md" <<'EOF'
 # AGENTS.md - Client Agent Workspace
@@ -258,7 +277,7 @@ write_agent_bootstrap_files() {
 
 If `BOOTSTRAP.md` exists, follow it first. It is the only place that performs the first-run client onboarding and skill-reading flow.
 
-Do not reread the bootstrap skills on every session by default. Use them when the current task needs Meta ads strategy, creative production, Drive access, or image model setup.
+Do not reread the bootstrap skills on every session by default. Use them when the current task needs Meta ads strategy, creative production, Drive access, image model setup, or agency/client-agent management.
 
 ## Memory
 
@@ -287,8 +306,10 @@ This file is the one-time first-run prompt. Do this only while `BOOTSTRAP.md` ex
 5. Keep the helper skills available for relevant tasks:
    - `skills/google-drive-service-account/SKILL.md`
    - `skills/image-model-api-keys/SKILL.md`
-6. If important client context is missing, ask only the minimum useful questions.
-7. Save important answers into the relevant workspace files.
+6. Learn that the AI Ad Agency Pack is installed at `packs/ai-ad-agency-pack/`.
+7. Use `scripts/create-agency-client.sh` when the user wants to create a separate client agent/group inside this OpenClaw.
+8. If important client context is missing, ask only the minimum useful questions.
+9. Save important answers into the relevant workspace files.
 
 If the user asks: "תקרא את ה-meta token שלך ותגיד לי לאיזה חשבונות יש לך גישה", run:
 
@@ -343,6 +364,14 @@ bash scripts/meta-token-accounts.sh
 ```
 
 This reads `META_API_TOKEN` from the environment and never prints the token.
+
+Create a new isolated client agent from the installed AI Ad Agency Pack:
+
+```bash
+bash scripts/create-agency-client.sh "Client Name" whatsapp "GROUP_ID"
+```
+
+The agency pack itself is installed at `packs/ai-ad-agency-pack/`, and its shared `client-ads-manager` skill is installed under the OpenClaw state skills directory.
 EOF
 
   cat > "$workspace_dir/scripts/meta-token-accounts.sh" <<'EOF'
@@ -421,6 +450,24 @@ for account in accounts:
 PY
 EOF
   chmod +x "$workspace_dir/scripts/meta-token-accounts.sh"
+
+  cat > "$workspace_dir/scripts/create-agency-client.sh" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+
+export OPENCLAW_HOME="${OPENCLAW_HOME:-/data/.openclaw}"
+export OPENCLAW_AGENT_MODEL="${OPENCLAW_AGENT_MODEL:-codex/gpt-5.5}"
+
+PACK_SCRIPT="${OPENCLAW_HOME}/workspace/packs/ai-ad-agency-pack/scripts/create-client-agent.sh"
+
+if [[ ! -x "$PACK_SCRIPT" ]]; then
+  echo "AI Ad Agency Pack create-client-agent script was not found at: $PACK_SCRIPT" >&2
+  exit 1
+fi
+
+exec "$PACK_SCRIPT" "$@"
+EOF
+  chmod +x "$workspace_dir/scripts/create-agency-client.sh"
 }
 
 write_project_files() {

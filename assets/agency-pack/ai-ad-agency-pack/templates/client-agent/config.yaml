@@ -1,0 +1,41 @@
+# Client Configuration
+
+onboarding_complete: false
+
+client:
+  name: "{{CLIENT_NAME}}"
+  slug: "{{CLIENT_SLUG}}"
+  language: "he"
+  timezone: "Asia/Jerusalem"
+  contacts: []
+
+meta_ads:
+  accounts: []
+  page_id: ""
+  pixel_id: ""
+  ig_account_id: ""
+  currency: "ILS"
+  currency_display: 'ש"ח'
+  api_version: "v21.0"
+
+reports:
+  daily:
+    enabled: true
+    time: "08:00"
+    metrics:
+      - spend
+      - leads
+      - cpl
+  weekly:
+    enabled: true
+    day: "sunday"
+    time: "09:00"
+    include_andromeda: true
+
+permissions:
+  auto_optimize: false
+  require_approval_for_budget_changes: true
+  require_approval_for_pausing: true
+
+campaigns:
+  active: []
