@@ -10,6 +10,7 @@ PROVISION_CMD="${PROVISION_CMD:-/usr/local/bin/openclaw-run-once-provision-clien
 OAUTH_HELPER="${OAUTH_HELPER:-/root/openclaw-run-once-oauth-chat.sh}"
 CLEANUP_REQUEST="${CLEANUP_REQUEST:-/usr/local/bin/openclaw-run-once-cleanup-request}"
 CLEANUP_WORKER="${CLEANUP_WORKER:-/usr/local/bin/openclaw-run-once-cleanup-worker}"
+ENV_FILE="${ENV_FILE:-/root/openclaw-run-once-wizard.env}"
 SELF_DESTRUCT=0
 
 usage() {
@@ -134,7 +135,7 @@ echo "Cleaning temporary run-once wizard for \${slug:-unknown}..."
 systemctl disable --now "$SERVICE_NAME" >/dev/null 2>&1 || true
 rm -f /etc/systemd/system/"$SERVICE_NAME"
 systemctl daemon-reload >/dev/null 2>&1 || true
-rm -f "$FORM_PATH" "$OAUTH_HELPER" "$PROVISION_CMD" "$TOKEN_FILE"
+rm -f "$FORM_PATH" "$OAUTH_HELPER" "$PROVISION_CMD" "$TOKEN_FILE" "$ENV_FILE"
 rm -f "$CLEANUP_REQUEST" "$CLEANUP_WORKER"
 case "$PACKAGE_DIR" in
   /tmp/*|/root/*)
@@ -157,6 +158,12 @@ else
   cleanup_args_line=""
 fi
 
+{
+  printf 'AGENCY_PACK_URL=%q\n' "${AGENCY_PACK_URL:-}"
+  printf 'AGENCY_PACK_GITHUB_TOKEN=%q\n' "${AGENCY_PACK_GITHUB_TOKEN:-}"
+} > "$ENV_FILE"
+chmod 600 "$ENV_FILE"
+
 cat > /etc/systemd/system/"$SERVICE_NAME" <<EOF
 [Unit]
 Description=OpenClaw Run-Once Client Wizard
@@ -165,6 +172,7 @@ Wants=network-online.target
 
 [Service]
 Type=simple
+EnvironmentFile=-$ENV_FILE
 ExecStart=/usr/bin/python3 "$FORM_PATH" --bind "$BIND" --port "$PORT" --token-file "$TOKEN_FILE" --provision-cmd "$PROVISION_CMD" --oauth-helper "$OAUTH_HELPER" $cleanup_args_line
 Restart=on-failure
 RestartSec=3

@@ -16,6 +16,30 @@ cd /tmp/openclaw-run-once-client-wizard
 bash bin/run-managed-client-wizard.sh --self-destruct
 ```
 
+## Agency Pack Quick Start
+
+Use this variant when the created OpenClaw should become an AI Ad Agency
+workspace automatically after OAuth and Telegram pairing.
+
+If the Agency Pack release is private, provide a GitHub token with access to
+`MosheFarkash/ai-ad-agency-pack`:
+
+```bash
+export AGENCY_PACK_GITHUB_TOKEN="PASTE_GITHUB_TOKEN_HERE"
+rm -rf /tmp/openclaw-run-once-client-wizard
+git clone https://github.com/MosheFarkash/openclaw-run-once-client-wizard.git /tmp/openclaw-run-once-client-wizard
+cd /tmp/openclaw-run-once-client-wizard
+bash bin/run-agency-client-wizard.sh --self-destruct
+```
+
+The agency wizard uses this release by default:
+
+```text
+https://github.com/MosheFarkash/ai-ad-agency-pack/releases/download/v0.1.0/ai-ad-agency-pack-0.1.0.tgz
+```
+
+Override it with `AGENCY_PACK_URL` when releasing a new pack version.
+
 The command prints:
 
 - a local VPS URL,

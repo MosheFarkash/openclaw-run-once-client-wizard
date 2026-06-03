@@ -32,6 +32,8 @@ DEFAULT_PROVISION_CMD = "/usr/local/bin/provision-openclaw-client"
 DEFAULT_DOCKER_ROOT = "/docker"
 DEFAULT_OAUTH_HELPER = "/root/openclaw-codex-oauth-chat.sh"
 DEFAULT_CLEANUP_COMMAND = ""
+DEFAULT_AGENCY_PACK_URL = os.environ.get("AGENCY_PACK_URL", "")
+DEFAULT_AGENCY_PACK_GITHUB_TOKEN = os.environ.get("AGENCY_PACK_GITHUB_TOKEN", "")
 TOKEN_RE = re.compile(r"^[A-Za-z0-9_.:-]{12,}$")
 SLUG_RE = re.compile(r"^[a-z0-9][a-z0-9-]{0,50}[a-z0-9]$")
 CALLBACK_RE = re.compile(r"^http://localhost:[0-9]+/auth/callback\?")
@@ -618,6 +620,99 @@ class ProvisionHandler(BaseHTTPRequestHandler):
         combined = "=== OpenAI Codex auth order ===\n" + command_output(proc)
         return proc.returncode, redact(combined, [profile_id])
 
+    def install_agency_pack(self, slug: str) -> tuple[int, str]:
+        pack_url = self.server.agency_pack_url
+        if not pack_url:
+            return 0, "=== Agency Pack ===\nSkipped; no AGENCY_PACK_URL configured."
+
+        container = self.find_container(slug)
+        if not container:
+            return 1, f"=== Agency Pack ===\nNo running container found for {project_name(slug)}"
+
+        token = self.server.agency_pack_github_token
+        headers: list[str] = []
+        if token:
+            headers = ["-H", f"Authorization: Bearer {token}", "-H", "Accept: application/octet-stream"]
+
+        tmp_path = Path(tempfile.mkstemp(prefix="ai-ad-agency-pack-", suffix=".tgz")[1])
+        try:
+            download_proc = subprocess.run(
+                ["curl", "-fL", *headers, pack_url, "-o", str(tmp_path)],
+                text=True,
+                capture_output=True,
+                timeout=180,
+                check=False,
+            )
+            combined = "=== Agency Pack download ===\n" + redact(command_output(download_proc), [token])
+            if download_proc.returncode != 0:
+                return download_proc.returncode, combined
+
+            cp_proc = subprocess.run(
+                ["docker", "cp", str(tmp_path), f"{container}:/tmp/ai-ad-agency-pack.tgz"],
+                text=True,
+                capture_output=True,
+                timeout=120,
+                check=False,
+            )
+            combined += "\n\n=== Agency Pack copy ===\n" + command_output(cp_proc)
+            if cp_proc.returncode != 0:
+                return cp_proc.returncode, combined
+
+            install_script = r'''
+set -e
+OPENCLAW_HOME="/data/.openclaw"
+WORKSPACE="/data/.openclaw/workspace"
+TS="$(date +%Y%m%d-%H%M%S)"
+mkdir -p "$OPENCLAW_HOME/backups" "$WORKSPACE" "$OPENCLAW_HOME/skills"
+tar -czf "$OPENCLAW_HOME/backups/pre-agency-pack-$TS.tgz" -C "$WORKSPACE" AGENTS.md SOUL.md USER.md IDENTITY.md MEMORY.md TOOLS.md HEARTBEAT.md packs 2>/dev/null || true
+tar -xzf /tmp/ai-ad-agency-pack.tgz -C "$WORKSPACE"
+cp -a "$WORKSPACE/packs/ai-ad-agency-pack/workspace-root/." "$WORKSPACE/"
+rm -rf "$OPENCLAW_HOME/skills/client-ads-manager"
+cp -a "$WORKSPACE/packs/ai-ad-agency-pack/skills/client-ads-manager" "$OPENCLAW_HOME/skills/"
+chmod +x "$WORKSPACE/packs/ai-ad-agency-pack/scripts/"*.sh
+OPENCLAW_HOME="$OPENCLAW_HOME" WORKSPACE="$WORKSPACE" "$WORKSPACE/packs/ai-ad-agency-pack/scripts/verify-install.sh"
+'''
+            install_proc = subprocess.run(
+                ["docker", "exec", "-u", "0", container, "sh", "-lc", install_script],
+                text=True,
+                capture_output=True,
+                timeout=300,
+                check=False,
+            )
+            combined += "\n\n=== Agency Pack install + verify ===\n" + command_output(install_proc)
+            if install_proc.returncode != 0:
+                return install_proc.returncode, combined
+
+            restart_proc = subprocess.run(
+                ["docker", "restart", container],
+                text=True,
+                capture_output=True,
+                timeout=120,
+                check=False,
+            )
+            combined += "\n\n=== Agency Pack container restart ===\n" + command_output(restart_proc)
+            if restart_proc.returncode != 0:
+                return restart_proc.returncode, combined
+
+            port = self.client_port(slug)
+            if port:
+                for _ in range(60):
+                    health = subprocess.run(
+                        ["curl", "-s", "-o", "/dev/null", "-w", "%{http_code}", f"http://127.0.0.1:{port}/health"],
+                        text=True,
+                        capture_output=True,
+                        timeout=5,
+                        check=False,
+                    )
+                    if health.stdout.strip() == "200":
+                        combined += f"\nAgency Pack health after restart: 200 on port {port}"
+                        break
+                    time.sleep(1)
+
+            return 0, combined
+        finally:
+            tmp_path.unlink(missing_ok=True)
+
     def approve_telegram_pairing(self, slug: str, pairing_code: str) -> tuple[int, str]:
         if not PAIRING_CODE_RE.match(pairing_code):
             raise RuntimeError("Telegram pairing code must be 4-40 letters/numbers/dashes/underscores.")
@@ -942,10 +1037,25 @@ class ProvisionHandler(BaseHTTPRequestHandler):
         try:
             code, output = self.approve_telegram_pairing(slug, pairing_code)
             if code == 0:
+                agency_code, agency_output = self.install_agency_pack(slug)
+                output += "\n\n" + agency_output
+                if agency_code != 0:
+                    self.send_html(
+                        html_page(
+                            self.server.admin_token,
+                            f"Telegram pairing עבור `{slug}` הצליח, אבל התקנת Agency Pack נכשלה עם exit code {agency_code}",
+                            output,
+                            step="telegram",
+                            slug=slug,
+                            public_url=self.client_public_url(slug),
+                        ),
+                        status=500,
+                    )
+                    return
                 self.send_html(
                     html_page(
                         self.server.admin_token,
-                        f"Telegram pairing עבור `{slug}` הצליח. עכשיו אפשר להוסיף מפתחות ENV ללקוח.",
+                        f"Telegram pairing עבור `{slug}` הצליח ו־Agency Pack הותקן. עכשיו אפשר להוסיף מפתחות ENV ללקוח.",
                         output,
                         step="env",
                         slug=slug,
@@ -1152,6 +1262,8 @@ class ProvisionServer(ThreadingHTTPServer):
         docker_root: str,
         oauth_helper: str,
         cleanup_command: str,
+        agency_pack_url: str,
+        agency_pack_github_token: str,
         timeout: int,
     ):
         super().__init__(server_address, handler)
@@ -1160,6 +1272,8 @@ class ProvisionServer(ThreadingHTTPServer):
         self.docker_root = docker_root
         self.oauth_helper = oauth_helper
         self.cleanup_command = cleanup_command
+        self.agency_pack_url = agency_pack_url
+        self.agency_pack_github_token = agency_pack_github_token
         self.timeout = timeout
 
 
@@ -1172,6 +1286,8 @@ def main() -> int:
     parser.add_argument("--docker-root", default=DEFAULT_DOCKER_ROOT)
     parser.add_argument("--oauth-helper", default=DEFAULT_OAUTH_HELPER)
     parser.add_argument("--cleanup-command", default=DEFAULT_CLEANUP_COMMAND)
+    parser.add_argument("--agency-pack-url", default=DEFAULT_AGENCY_PACK_URL)
+    parser.add_argument("--agency-pack-github-token", default=DEFAULT_AGENCY_PACK_GITHUB_TOKEN)
     parser.add_argument("--timeout", type=int, default=900)
     args = parser.parse_args()
 
@@ -1189,6 +1305,8 @@ def main() -> int:
         args.docker_root,
         args.oauth_helper,
         args.cleanup_command,
+        args.agency_pack_url,
+        args.agency_pack_github_token,
         args.timeout,
     )
     print(f"Listening on http://{args.bind}:{args.port}/?token={token}", flush=True)
