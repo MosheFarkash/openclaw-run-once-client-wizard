@@ -21,11 +21,7 @@ bash bin/run-managed-client-wizard.sh --self-destruct
 Use this variant when the created OpenClaw should become an AI Ad Agency
 workspace automatically after OAuth and Telegram pairing.
 
-If the Agency Pack release is private, provide a GitHub token with access to
-`MosheFarkash/ai-ad-agency-pack`:
-
 ```bash
-export AGENCY_PACK_GITHUB_TOKEN="PASTE_GITHUB_TOKEN_HERE"
 rm -rf /tmp/openclaw-run-once-client-wizard
 git clone https://github.com/MosheFarkash/openclaw-run-once-client-wizard.git /tmp/openclaw-run-once-client-wizard
 cd /tmp/openclaw-run-once-client-wizard
